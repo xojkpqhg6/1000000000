@@ -326,24 +326,30 @@ function spendItem(item, index) {
   const info = document.getElementById("info");
   const hint = document.getElementById("hint");
 
-  // vorherige Lücke zurücksetzen – immer nur EIN Vergleich sichtbar
-  for (let i = 0; i < total; i++) cells[i].classList.remove("gone");
+  // Lücken NICHT zurücksetzen – jede Ausgabe reißt eine weitere Lücke
+  // irgendwo anders in den (noch vollen) Stapel.
+  let present = 0;
+  for (let i = 0; i < total; i++) if (!cells[i].classList.contains("gone")) present++;
 
-  if (count >= total) {
+  if (count >= present) {
     for (let i = 0; i < total; i++) cells[i].classList.add("gone");
     info.innerHTML = `😳 <b>${item.emoji} ${item.name}</b> (${fmtEuro(
       price
-    )}) frisst den <b>kompletten</b> Stapel.`;
+    )}) frisst den <b>gesamten Rest</b> des Stapels.`;
+    hint.textContent = "";
   } else {
-    const start = Math.floor((total - count) / 2);
-    for (let i = start; i < start + count; i++) cells[i].classList.add("gone");
+    const start = carveGap(cells, total, count);
+    const gone = total - present + count;
     const pct = ((count / total) * 100).toFixed(count / total < 0.01 ? 2 : 1);
+    const pctTotal = ((gone / total) * 100).toFixed(1);
     info.innerHTML = `🔍 <b>${item.emoji} ${item.name}</b> = <b>${fmtNum(
       count
-    )}</b> von ${fmtNum(total)} Batzen · gerade mal <b>${pct}%</b> der Milliarde (${fmtEuro(
+    )}</b> Batzen · gerade mal <b>${pct}%</b> der Milliarde (${fmtEuro(
       price
-    )}).`;
-    hint.innerHTML = `<button id="reveal">👀 Lücke zeigen</button>`;
+    )}). &nbsp;·&nbsp; Insgesamt ausgegeben: <b>${fmtNum(
+      gone
+    )}</b> Batzen (${pctTotal}%).`;
+    hint.innerHTML = `<button id="reveal">👀 Neue Lücke zeigen</button>`;
     document.getElementById("reveal").addEventListener("click", () => {
       cells[start].scrollIntoView({ behavior: "smooth", block: "center" });
     });
@@ -362,6 +368,45 @@ function spendItem(item, index) {
         life
       )} Batzen – ein winziger Fleck im Stapel. <b>So groß ist eine Milliarde.</b>`;
   }
+}
+
+// Reißt eine zusammenhängende Lücke von `count` Batzen in noch volles
+// Gebiet – zufällig platziert, damit jede Ausgabe „woanders" landet.
+// Gibt den Start-Index zurück (zum Hinscrollen).
+function carveGap(cells, total, count) {
+  // freie (nicht ausgegebene) zusammenhängende Segmente sammeln
+  const segs = [];
+  let s = null;
+  for (let i = 0; i < total; i++) {
+    const free = !cells[i].classList.contains("gone");
+    if (free && s === null) s = i;
+    if (!free && s !== null) {
+      segs.push([s, i]);
+      s = null;
+    }
+  }
+  if (s !== null) segs.push([s, total]);
+
+  // Segmente, in die die Lücke am Stück passt
+  const fitting = segs.filter(([a, b]) => b - a >= count);
+  if (fitting.length) {
+    const [a, b] = fitting[Math.floor(Math.random() * fitting.length)];
+    const start = a + Math.floor(Math.random() * (b - a - count + 1));
+    for (let i = start; i < start + count; i++) cells[i].classList.add("gone");
+    return start;
+  }
+
+  // Notfall (stark zerstückelt): die ersten `count` freien Batzen füllen
+  let placed = 0;
+  let first = -1;
+  for (let i = 0; i < total && placed < count; i++) {
+    if (!cells[i].classList.contains("gone")) {
+      if (first < 0) first = i;
+      cells[i].classList.add("gone");
+      placed++;
+    }
+  }
+  return first;
 }
 
 // Volles Gitter für den Ausgeben-Screen (per DOM für Tempo)
